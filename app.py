@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import json
-import plotly.express as px
-from openai import AzureOpenAI
 
+from openai import AzureOpenAI
+import plotly.express as px
 # ---------------------------------------------------------
 # Streamlit page config
 # ---------------------------------------------------------
@@ -400,3 +400,4 @@ if user_query:
 
     raw = ask_bot(user_query)
     process_llm_response(raw, user_query)
+
