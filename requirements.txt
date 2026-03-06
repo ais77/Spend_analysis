@@ -1,6 +1,5 @@
-chainlit==2.9.6
 openai==1.109.1
 pandas==2.2.2
 plotly==6.5.2
-
 streamlit==1.36.0
+
