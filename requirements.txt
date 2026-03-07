@@ -1,6 +1,8 @@
 openai
 pandas
 plotly
-streamlit
+streamlit>=1.20.0
+altair<5.0
+
 
 
