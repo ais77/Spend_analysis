@@ -2,9 +2,12 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import json
-
-from openai import AzureOpenAI
 import plotly.express as px
+from openai import AzureOpenAI
+
+if "awaiting_clarification" not in st.session_state:
+    st.session_state.awaiting_clarification = False
+
 # ---------------------------------------------------------
 # Streamlit page config
 # ---------------------------------------------------------
@@ -143,6 +146,76 @@ def run_sql_with_correction(sql: str, user_query: str) -> pd.DataFrame:
 # ---------------------------------------------------------
 # LLM: main assistant
 # ---------------------------------------------------------
+
+
+def ask_agent(user_query: str) -> str | None:
+    """
+    Clarifies every new query exactly once.
+    If awaiting clarification, do not ask again.
+    """
+
+    # If we are already waiting for the user's clarification,
+    # do NOT ask again.
+    if st.session_state.awaiting_clarification:
+        return None
+
+    system_prompt = (
+        "You are an Ask Agent. Your job is to determine whether the user's "
+        "question is clear enough to answer.\n\n"
+        "If the question is ambiguous, incomplete, or could mean multiple things, "
+        "respond with a SINGLE clarifying question.\n\n"
+        "If the question is already clear, respond with EXACTLY: OK\n"
+        "Do not provide answers. Do not provide explanations."
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-2",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_query},
+        ],
+    ).choices[0].message.content.strip()
+
+    # If clear → no clarification needed
+    if response == "OK":
+        return None
+
+    # Otherwise → ask once and wait for user
+    st.session_state.awaiting_clarification = True
+    return response
+
+
+def plan_agent(user_query: str) -> dict:
+    """
+    Returns a structured plan describing how the main assistant should answer.
+    """
+    system_prompt = (
+        "You are a Plan Agent. Your job is to decide the best strategy for answering "
+        "the user's question.\n\n"
+        "Return ONLY JSON with the following fields:\n"
+        "{\n"
+        "  \"mode\": \"sql | semantic | visualization\",\n"
+        "  \"reason\": \"short explanation\",\n"
+        "  \"notes\": \"any constraints or hints for the assistant\"\n"
+        "}\n\n"
+        "Rules:\n"
+        "- Use 'sql' for filtering, grouping, listing, counting, aggregations.\n"
+        "- Use 'visualization' only if the user explicitly asks for a chart.\n"
+        "- Use 'semantic' for explanations, comparisons, correlations, reasoning.\n"
+        "- Do NOT return SQL. Do NOT answer the question.\n"
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-2",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_query},
+        ],
+    ).choices[0].message.content
+
+    return json.loads(response)
+
+
 def ask_bot(user_query: str) -> str:
     system_prompt = (
         "You are a data analysis assistant for a federal spending database.\n\n"
@@ -398,6 +471,38 @@ if user_query:
     with st.chat_message("user"):
         st.write(user_query)
 
+    # ---------------------------------------------------------
+    # 1. ASK AGENT — clarify every query once
+    # ---------------------------------------------------------
+    clarification = ask_agent(user_query)
+
+    if clarification:
+        # Ask the clarifying question
+        with st.chat_message("assistant"):
+            st.write(clarification)
+
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": clarification
+        })
+
+        st.stop()  # Wait for user to answer the clarifying question
+
+    # If we reach here, the user has clarified → reset flag
+    st.session_state.awaiting_clarification = False
+
+    # ---------------------------------------------------------
+    # 2. PLAN AGENT — decide how to answer
+    # ---------------------------------------------------------
+    plan = plan_agent(user_query)
+
+    st.session_state.chat_history.append({
+        "role": "assistant",
+        "content": f"Planning: {plan['reason']}"
+    })
+
+    # ---------------------------------------------------------
+    # 3. MAIN ASSISTANT — now run the real logic
+    # ---------------------------------------------------------
     raw = ask_bot(user_query)
     process_llm_response(raw, user_query)
-
