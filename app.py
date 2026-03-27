@@ -160,12 +160,14 @@ def ask_agent(user_query: str) -> str | None:
         return None
 
     system_prompt = (
-        "You are an Ask Agent. Your job is to determine whether the user's "
-        "question is clear enough to answer.\n\n"
-        "If the question is ambiguous, incomplete, or could mean multiple things, "
-        "respond with a SINGLE clarifying question.\n\n"
-        "If the question is already clear, respond with EXACTLY: OK\n"
-        "Do not provide answers. Do not provide explanations."
+    "You are an Ask Agent. Your job is to determine whether the user's "
+    "question is clear enough to answer.\n\n"
+    "If the question is ambiguous, incomplete, or could mean multiple things, "
+    "respond with a SINGLE clarifying question.\n\n"
+    "If the question is already clear, respond with EXACTLY: OK\n"
+    "Do not provide answers. Do not provide explanations.\n\n"
+    "If the user is referring to prior results or prior outputs already generated, "
+    "treat the query as clear and respond with EXACTLY: OK."
     )
 
     response = client.chat.completions.create(
